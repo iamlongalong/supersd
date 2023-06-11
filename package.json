@@ -1,5 +1,5 @@
 {
-  "name": "vite-crx-template",
+  "name": "supersd",
   "version": "0.0.1",
   "description": "Simple Chrome Extension Vite Starter Template",
   "scripts": {
@@ -11,7 +11,7 @@
     "clear": "rimraf extension",
     "prepare": "husky install"
   },
-  "author": "TinssonTai",
+  "author": "longalong",
   "devDependencies": {
     "@types/chrome": "^0.0.197",
     "@types/node": "^18.7.17",

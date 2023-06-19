@@ -16,7 +16,9 @@ export default defineComponent({
 </script>
 
 <template>
-  <div data-root="true" class="root-content"></div>
+  <div style="display: inline-block">
+    <slot></slot>
+  </div>
 </template>
 
 <style scoped lang="less"></style>

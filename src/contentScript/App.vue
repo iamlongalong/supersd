@@ -1,24 +1,27 @@
 <script lang="ts">
-import { defineComponent, ref } from 'vue'
+import { StyleValue, defineComponent, ref } from 'vue'
 // import { ElButton, ElDialog } from 'element-plus'
 import GenPage from './GenPage.vue'
 import MyPage from './MyPage.vue'
+import ModalMask from './ModalMask.vue'
+import { autoHistories } from './history.ts'
+import HistoryView from './HistoryView.vue'
 
 export default defineComponent({
   components: {
     GenPage,
-    MyPage
+    MyPage,
+    HistoryView,
+    ModalMask
   },
-  setup() {
-    const cache = ref<string>('')
-
+  setup(props, { emit }) {
+    // const selectedPage = ref<string>('mypage')
     const selectedPage = ref<string>('genpage')
 
+    const histLists = () => autoHistories.histories
+
     const handleClickHistory = () => {
-      ElMessage({
-        message: '查看历史记录',
-        type: 'success'
-      })
+      isHistoryOpen.value = !isHistoryOpen.value
       return
     }
 
@@ -27,7 +30,8 @@ export default defineComponent({
       return
     }
 
-    const isquit = ref<boolean>(true)
+    // const isquit = ref<boolean>(true)
+    const isquit = ref<boolean>(false)
     const handleClickQuit = () => {
       if (isquit.value) {
         isquit.value = false
@@ -39,37 +43,77 @@ export default defineComponent({
       return
     }
 
-    const getRootClasses = (): string => {
-      let classStrs = ''
+    const getRootStyle = (): StyleValue => {
+      let res = { width: '500px', right: '0' }
 
       if (isquit.value) {
-        classStrs += 'root-quit '
+        res.right = '-100%'
       }
 
       if (isscaleout.value) {
-        classStrs += 'root-scaleout '
+        res.width = '900px'
       }
 
-      return classStrs
+      return res
     }
 
+    const getModalWidth = (): string => {
+      if (isscaleout.value) {
+        // 存在 30px 边框
+        return '930px'
+      }
+      return '530px'
+    }
+
+    const editTags = ref<Array<SelectedTag>>([])
+    const edittagschanged = ref<boolean>(false)
+
+    const handleEdit = (stags: SavedTags) => {
+      console.log('handle edit history', stags)
+
+      if (editTags.value.length > 0) {
+        editTags.value.splice(0, editTags.value.length)
+      }
+
+      edittagschanged.value = !edittagschanged.value
+
+      editTags.value.push(...stags.selectedTags)
+
+      selectedPage.value = 'genpage'
+    }
+
+    const handleEditAutoHist = (stags: SavedTags) => {
+      isHistoryOpen.value = false
+
+      handleEdit(stags)
+    }
+
+    const isHistoryOpen = ref<boolean>(false)
+
     return {
-      cache,
       selectedPage,
       handleClickHistory,
       isscaleout,
       handleClickScaleout,
       isquit,
       handleClickQuit,
-      getRootClasses
+      getRootStyle,
+      getModalWidth,
+      handleEdit,
+      handleEditAutoHist,
+      editTags,
+      edittagschanged,
+      histLists,
+      isHistoryOpen,
+      autoHistories
     }
   }
 })
 </script>
 
 <template>
-  <div data-root="true" class="root-content" :class="getRootClasses()">
-    <el-container>
+  <div data-root="true" class="root-content" :style="getRootStyle()">
+    <el-container @scroll.stop="">
       <el-header class="header-container" height="2rem" style="padding: 0">
         <el-row justify="space-between">
           <el-col :span="12">
@@ -127,10 +171,42 @@ export default defineComponent({
         class="main-container"
       >
         <GenPage
-          v-if="selectedPage == 'genpage'"
+          v-show="selectedPage == 'genpage'"
           style="height: 100%"
+          :edit-tags="editTags"
+          :edittagschanged="edittagschanged"
         ></GenPage>
-        <MyPage v-if="selectedPage == 'mypage'" style="height: 100%"></MyPage>
+        <MyPage
+          v-if="selectedPage == 'mypage'"
+          style="height: 100%"
+          @edit="handleEdit"
+        ></MyPage>
+
+        <div class="hist-drawer-container">
+          <!-- <el-drawer
+            v-model="isHistoryOpen"
+            class="hist-drawer"
+            direction="btt"
+          >
+            <template #header>
+              <h4></h4>
+            </template>
+          </el-drawer> -->
+
+          <ModalMask
+            v-model="isHistoryOpen"
+            title="历史记录"
+            :modal-width="getModalWidth()"
+          >
+            <div v-if="isHistoryOpen" style="padding: 0 20px">
+              <HistoryView
+                :history-list="histLists()"
+                :can-remove="false"
+                @edit="handleEditAutoHist"
+              ></HistoryView>
+            </div>
+          </ModalMask>
+        </div>
       </el-main>
     </el-container>
   </div>
@@ -152,7 +228,8 @@ export default defineComponent({
 
 .root-content {
   user-select: none;
-  // color: #9c9c9c;
+  color: #3d3d3d;
+  font-size: 16px;
 }
 </style>
 
@@ -173,14 +250,6 @@ export default defineComponent({
   opacity: 1;
   height: 100vh;
   transition: right 0.6s ease-in-out, width 0.6s ease-in-out;
-
-  &.root-scaleout {
-    width: 900px;
-  }
-
-  &.root-quit {
-    right: -100%;
-  }
 }
 
 .header-icon-container {
@@ -272,6 +341,18 @@ div {
 
   &.footer-show {
     right: 60px;
+  }
+}
+
+.hist-drawer-container {
+  position: relative;
+
+  .hist-drawer {
+    position: absolute;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    top: 300px;
   }
 }
 </style>

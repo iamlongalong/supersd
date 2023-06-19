@@ -27,3 +27,8 @@ export interface SelectedTag extends Tag {
   enhance: number
   language: Language
 }
+
+export interface SavedTags {
+  timestamp: number
+  selectedTags: Array<SelectedTag>
+}

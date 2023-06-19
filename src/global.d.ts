@@ -33,3 +33,7 @@ declare interface SelectedTag extends Tag {
   enhance: number
 }
 
+declare interface SavedTags {
+  timestamp: number
+  selectedTags: Array<SelectedTag>
+}

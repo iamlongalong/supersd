@@ -1,28 +1,70 @@
 <script lang="ts">
-import { defineComponent, ref } from 'vue'
+import { defineComponent, ref, watch } from 'vue'
 import TagEditor from './TagEditor.vue'
 import TagSelector from './TagSelector.vue'
+import CountBadge from './CountBadge.vue'
 import { tagsDictArr, tagsDictMap } from './tagdict'
+import { autoHistories, userHistories } from './history.ts'
 
 export default defineComponent({
-  components: { TagEditor, TagSelector },
-
-  setup() {
-    const cache = ref<string>('')
+  components: { TagEditor, TagSelector, CountBadge },
+  props: {
+    editTags: {
+      type: Array as () => Array<SelectedTag>,
+      required: true
+    },
+    edittagschanged: {
+      type: Boolean,
+      required: false
+    }
+  },
+  setup(props, { emit }) {
     const selectedModel = ref<string>('stable-diffusion-webui')
 
     const getTagDictByName = (dictName: string): TagDict => {
       return tagsDictMap.get(dictName)
     }
 
+    // <tagdictName,<tagId, isInDict>>
+    const tagsInTagDictMap = new Map<string, Map<number, boolean>>()
+
     const allTags: Map<number, Tag> = new Map([])
     tagsDictMap.forEach((tagdict, dname) => {
+      let dictMap = new Map<number, boolean>()
+      tagsInTagDictMap.set(dname, dictMap)
+
       tagdict.classes.forEach((classes, cname) => {
         classes.contents.forEach((tag) => {
           allTags.set(tag.id, tag)
+          dictMap.set(tag.id, true)
         })
       })
     })
+
+    const isTagInTagDict = (tagId: number, dictName: string): boolean => {
+      let isIn = false
+      // Array.from(tagsInTagDictMap.keys()).some((dictName) => {
+      let dictMap = tagsInTagDictMap.get(dictName) || new Map()
+
+      if (dictMap.get(tagId)) {
+        isIn = true
+      }
+      // })
+
+      return isIn
+    }
+
+    const getTagsInDictCount = (dictName: string): number => {
+      let dictCount = 0
+
+      selectedTagsArr.value.forEach((tagId) => {
+        if (isTagInTagDict(tagId, dictName)) {
+          dictCount++
+        }
+      })
+
+      return dictCount
+    }
 
     const getTagByID = (tagID: number): Tag => {
       return allTags.get(tagID)
@@ -68,7 +110,7 @@ export default defineComponent({
     // selectedTagsArr.value.push(4)
 
     // 处理选择 tag (或取消选择)
-    const handleTagSelect = (tagId: number) => {
+    const handleTagSelect = (tagId: number, enhances?: number) => {
       if (selectedTagsMap.value.has(tagId)) {
         // 存在，则去除
         let idx = selectedTagsArr.value.indexOf(tagId)
@@ -80,10 +122,12 @@ export default defineComponent({
         // 不存在，则添加
         let tag = getTagByID(tagId)
 
-        selectedTagsMap.value.set(tagId, {
+        let selectedTag = {
           ...tag,
-          enhance: 0
-        } as SelectedTag)
+          enhance: enhances || 0
+        } as SelectedTag
+
+        selectedTagsMap.value.set(tagId, selectedTag)
 
         selectedTagsArr.value.push(tagId)
       }
@@ -108,8 +152,139 @@ export default defineComponent({
       return
     }
 
+    const randomN = (max: number): number => {
+      return Math.floor(Math.random() * max)
+    }
+
+    const handleRandom = () => {
+      let randomSelectedTags = Array<SelectedTag>()
+      // 每个 dict 抽一个
+      tagsDictArr.forEach((dictName) => {
+        let tagDict = getTagDictByName(dictName)
+        let arr = Array.from(tagDict.classes.entries())
+        let contents = arr[randomN(arr.length)][1].contents
+        let tag = contents[randomN(contents.length)]
+
+        randomSelectedTags.push({
+          ...tag
+        } as SelectedTag)
+      })
+
+      // 处理清理
+      handleCleanAll()
+
+      // 处理重新赋值
+      randomSelectedTags.forEach((tag) => {
+        handleTagSelect(tag.id)
+      })
+
+      return
+    }
+
+    const handleAutoSave = () => {
+      if (!selectedTagsArr.value.length) {
+        return
+      }
+
+      let selectedTags = new Array<SelectedTag>()
+      selectedTagsArr.value.forEach((tagid) => {
+        let stag = selectedTagsMap.value.get(tagid)
+
+        selectedTags.push({
+          id: stag.id,
+          nameCh: stag.nameCh,
+          nameEng: stag.nameEng,
+          enhance: stag.enhance
+        })
+      })
+
+      autoHistories.saveHistory(selectedTags)
+      return
+    }
+
+    if (props.editTags) {
+      props.editTags.forEach((stag) => {
+        handleTagSelect(stag.id, stag.enhance)
+      })
+    }
+
+    watch(
+      () => props.edittagschanged,
+      (nv, ov) => {
+        // 因为监听不到 editTags 的变化，兼容处理一下
+
+        if (props.editTags.length > 0) {
+          handleCleanAll()
+
+          props.editTags.forEach((tag) => {
+            handleTagSelect(tag.id, tag.enhance)
+          })
+        }
+      }
+    )
+
+    const handleCleanAll = () => {
+      // 处理自动保存
+      handleAutoSave()
+
+      // 清理
+      if (selectedTagsArr.value.length > 0) {
+        selectedTagsArr.value.splice(0, selectedTagsArr.value.length)
+        selectedTagsMap.value.clear()
+      }
+      return
+    }
+
+    let lastSaveTime = new Date().getTime()
+    const handleSaveAll = () => {
+      let lastSaveDiffSec = Math.floor(
+        (new Date().getTime() - lastSaveTime) / 1000
+      )
+      // 频繁点错控制
+      if (lastSaveDiffSec < 3) {
+        ElMessage({
+          message: `${lastSaveDiffSec}s 前才保存了的~`,
+          type: 'warning'
+        })
+        return
+      }
+
+      lastSaveTime = new Date().getTime()
+
+      let selectedTags = new Array<SelectedTag>()
+      selectedTagsArr.value.forEach((tagid) => {
+        let stag = selectedTagsMap.value.get(tagid)
+
+        selectedTags.push({
+          id: stag.id,
+          nameCh: stag.nameCh,
+          nameEng: stag.nameEng,
+          enhance: stag.enhance
+        })
+      })
+
+      userHistories.saveHistory(selectedTags)
+
+      ElMessage({
+        message: '保存成功',
+        type: 'success'
+      })
+      return
+    }
+
+    const handleChangePosition = (sourceIdx: number, targetIdx: number) => {
+      console.log('in handle change position', sourceIdx, targetIdx)
+
+      const removed = selectedTagsArr.value.splice(sourceIdx, 1)
+
+      if (targetIdx > sourceIdx) {
+        selectedTagsArr.value.splice(targetIdx, 0, removed[0])
+      } else {
+        selectedTagsArr.value.splice(targetIdx + 1, 0, removed[0])
+      }
+    }
+
     return {
-      cache,
       selectedModel,
       tagDicts,
       selectedTagDict,
@@ -120,7 +295,12 @@ export default defineComponent({
       handleEnhance,
       handleDehance,
       handleRemove,
-      getTagByID
+      handleRandom,
+      handleCleanAll,
+      handleSaveAll,
+      getTagByID,
+      getTagsInDictCount,
+      handleChangePosition
     }
   }
 })
@@ -153,6 +333,10 @@ export default defineComponent({
         @enhance="handleEnhance"
         @dehance="handleDehance"
         @remove="handleRemove"
+        @random="handleRandom"
+        @cleanall="handleCleanAll"
+        @saveall="handleSaveAll"
+        @change-position="handleChangePosition"
       ></TagEditor>
     </div>
 
@@ -160,7 +344,7 @@ export default defineComponent({
     <div class="bigblock">
       <el-row justify="start" align="middle">
         <el-col :span="12">
-          <h3>Tag 词典</h3>
+          <h3>我的 Tag 词典</h3>
         </el-col>
         <el-col :span="12">
           <el-row justify="end">
@@ -174,11 +358,21 @@ export default defineComponent({
           <span
             v-for="dict in tagDicts"
             :key="dict.name"
-            class="tag-dict-item"
-            :class="selectedTagDict.name == dict.name ? 'selected' : ''"
             @click="selectedTagDict = dict"
-            >{{ dict.label }}</span
           >
+            <CountBadge
+              :value="getTagsInDictCount(dict.name)"
+              type="warning"
+              :max="10"
+            >
+              <span
+                class="tag-dict-item"
+                :class="selectedTagDict.name == dict.name ? 'selected' : ''"
+              >
+                {{ dict.label }}
+              </span>
+            </CountBadge>
+          </span>
         </div>
       </el-row>
 
@@ -247,5 +441,11 @@ export default defineComponent({
       // transition: all 0.3s;
     }
   }
+}
+
+.badge-selected-num {
+  background-color: #ffd83c;
+  color: #1a1a1a;
+  font-weight: 500;
 }
 </style>

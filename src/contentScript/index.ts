@@ -34,3 +34,10 @@ import App from './App.vue'
 
   app.mount(root)
 })()
+
+// 给主页面导入 element css
+// const link = document.createElement('link')
+// link.rel = 'stylesheet'
+// link.type = 'text/css'
+// link.href = '//unpkg.com/element-plus/dist/index.css'
+// document.head.appendChild(link)

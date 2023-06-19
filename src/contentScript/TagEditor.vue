@@ -1,6 +1,7 @@
 <script lang="ts">
 import { defineComponent, ref } from 'vue'
 import TagSelected from './TagSelected.vue'
+import { copyToClipboard, getTagString } from './utils'
 
 export default defineComponent({
   components: { TagSelected },
@@ -16,7 +17,16 @@ export default defineComponent({
       default: new Map<number, SelectedTag>([])
     }
   },
-  emits: ['changeLanguage', 'enhance', 'dehance', 'remove'],
+  emits: [
+    'changeLanguage',
+    'enhance',
+    'dehance',
+    'remove',
+    'random',
+    'cleanall',
+    'saveall',
+    'changePosition'
+  ],
   setup(props, { emit }) {
     const cache = ref<string>('')
     const selectedLanguage = ref<string>('chinese')
@@ -42,14 +52,26 @@ export default defineComponent({
     }
 
     const handleRandom = () => {
-      ElMessage({
-        message: '随机成功',
-        type: 'success'
-      })
+      emit('random')
       return
     }
 
+    const handleChangePosition = (sourceIdx: number, targetIdx: number) => {
+      emit('changePosition', sourceIdx, targetIdx)
+    }
+
     const handleCopy = () => {
+      let tagStrArr = Array<string>()
+      props.selectedTagsarr.forEach((tagId) => {
+        let tag = getSelectedTag(tagId)
+        tagStrArr.push(getTagString(tag))
+      })
+
+      let str = tagStrArr.join(',')
+
+      copyToClipboard(str)
+
+      // 提示
       ElMessage({
         message: '复制成功',
         type: 'success'
@@ -57,19 +79,33 @@ export default defineComponent({
       return
     }
     const handleSave = () => {
-      ElMessage({
-        message: '保存成功',
-        type: 'success'
-      })
+      emit('saveall')
+
       return
     }
     const handleClear = () => {
-      ElMessage({
-        message: '清理成功',
-        type: 'success'
-      })
+      emit('cleanall')
+
       return
     }
+
+    const onDragOver = (event: DragEvent, idx: number) => {
+      event.preventDefault()
+    }
+    const onDrop = (event: DragEvent, idx: number) => {
+      // 获取拖动项的索引
+      const sourceIndex = parseInt(event.dataTransfer!.getData('text/plain'))
+
+      // 获取放置目标的索引
+      const targetIndex = idx
+
+      handleChangePosition(sourceIndex, targetIndex)
+    }
+
+    const handleNewTag = (idx: number) => {
+      console.log('create new tag', idx)
+    }
+
     return {
       cache,
       selectedLanguage,
@@ -81,7 +117,11 @@ export default defineComponent({
       getSelectedTag,
       handleEnhance,
       handleDehance,
-      handleRemove
+      handleRemove,
+      handleChangePosition,
+      onDragOver,
+      onDrop,
+      handleNewTag
     }
   }
 })
@@ -91,25 +131,37 @@ export default defineComponent({
   <div>
     <!-- tag 框 -->
     <div style="position: relative">
-      <el-row justify="start" class="tag-editor">
-        <span
-          v-for="(tagid, idx) of selectedTagsarr"
-          :key="tagid"
-          style="margin-right: 5px"
-        >
-          <TagSelected
-            :selected-language="selectedLanguage"
-            :tag="getSelectedTag(tagid)"
-            @enhance="handleEnhance(tagid)"
-            @dehance="handleDehance(tagid)"
-            @remove="handleRemove(tagid)"
-          ></TagSelected>
-          <span v-if="idx < selectedTagsarr.length - 1">，</span>
-        </span>
+      <el-row justify="start" align="top" class="tag-editor">
+        <el-col>
+          <span
+            v-for="(tagid, idx) of selectedTagsarr"
+            :key="tagid"
+            @dragover="(e) => onDragOver(e, idx)"
+            @drop="(e) => onDrop(e, idx)"
+          >
+            <TagSelected
+              style="transition: transform 0.3s ease-out"
+              :selected-language="selectedLanguage"
+              :tag="getSelectedTag(tagid)"
+              :index="idx"
+              :can-edit="true"
+              @changeposition="handleChangePosition"
+              @enhance="handleEnhance(tagid)"
+              @dehance="handleDehance(tagid)"
+              @remove="handleRemove(tagid)"
+            ></TagSelected>
+            <span
+              v-if="idx < selectedTagsarr.length - 1"
+              class="add-new"
+              @click="handleNewTag(idx)"
+              >，</span
+            >
+          </span>
+        </el-col>
       </el-row>
 
       <div class="editor-tips">
-        <span>
+        <span v-if="selectedTagsarr.length < 6">
           Tips：鼠标悬浮于 Tag，可增减 Tag 权重或删除 Tag；按住可拖动 Tag 顺序哦
         </span>
       </div>
@@ -117,7 +169,7 @@ export default defineComponent({
 
     <!-- 功能区 -->
     <el-row justify="start">
-      <div class="switch-span">
+      <div class="switch-span" style="line-height: 2rem">
         <span
           :class="selectedLanguage == 'english' ? 'selected' : 'none-selected'"
           @click="handleChangeLanguage('english')"
@@ -146,6 +198,9 @@ export default defineComponent({
 </template>
 
 <style scoped lang="less">
+.add-new {
+  cursor: text;
+}
 .switch-span {
   border-radius: 10px;
   background: #f4f4f4;
@@ -158,7 +213,7 @@ export default defineComponent({
   .none-selected {
     border-radius: 10px;
     padding: 0 0.5rem;
-    line-height: 2rem;
+    // line-height: 2rem;
     color: #7c7b7b;
   }
 
@@ -166,7 +221,7 @@ export default defineComponent({
     display: inline-block;
     border-radius: 10px;
     background: #ebe7f4;
-    line-height: 2rem;
+    // line-height: 2rem;
     padding: 0 0.5rem;
     color: #8d74d4;
   }
@@ -182,7 +237,7 @@ export default defineComponent({
   border: 1px solid #f1eef5;
   border-radius: 10px;
   color: #8d74d4;
-  margin-right: 0.6rem;
+  margin-right: 0.5rem;
   cursor: pointer;
 
   .icon {
@@ -201,7 +256,7 @@ export default defineComponent({
 }
 
 .tag-editor {
-  line-height: 2rem;
+  // line-height: 2rem;
   background-color: #f9f8fe;
   padding: 0.6rem;
   border-radius: 0.3rem;

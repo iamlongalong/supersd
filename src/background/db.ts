@@ -1,5 +1,5 @@
 import { IDBPDatabase, openDB } from 'idb'
-import { onMessage } from './utils'
+import { onMessage } from '../events/utils'
 
 /**
  *  封装indexDB方便background进行本地缓存
@@ -130,5 +130,5 @@ class CrxIndexDB {
   }
 }
 
-const db = new CrxIndexDB('crx_index_db', 'crx_bg_table')
+const db = new CrxIndexDB('supersd', 'sddatas')
 export default db
